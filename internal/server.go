@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"giggster.com/resizer/pkg"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"giggster.com/resizer/pkg"
 )
 
 type Server struct {
@@ -22,6 +23,8 @@ func (s *Server) Run() {
 
 	// Register a handler function
 	mux.HandleFunc("/resize", s.resizeHandler)
+
+	mux.HandleFunc("/healthz", s.healthzHandler)
 
 	// Create a new HTTP server
 	server := &http.Server{
@@ -121,6 +124,12 @@ func (s *Server) processHttpSuccess(w http.ResponseWriter, sizes map[string]pkg.
 		s.processHttpError(w, err, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
+	// You can add any logic here to check your application's health
+	// For simplicity, this handler will always return HTTP 200 OK
+	w.WriteHeader(http.StatusOK)
 }
 
 func NewHttpServer(port int, logger *StdLog) *Server {
