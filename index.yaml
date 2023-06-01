@@ -10,6 +10,6 @@ entries:
     name: gigg-resizer
     type: application
     urls:
-    - https://github.com/nocturnecity/image-resizer/gigg-resizer-0.1.0.tgz
+    - https://nocturnecity.github.io/image-resizer/gigg-resizer-0.1.0.tgz
     version: 0.1.0
 generated: "2023-06-01T08:12:11.761211+01:00"
