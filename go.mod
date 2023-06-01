@@ -1,4 +1,4 @@
-module giggster.com/resizer
+module github.com/nocturnecity/image-resizer
 
 go 1.20
 

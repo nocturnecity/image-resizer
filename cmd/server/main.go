@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"giggster.com/resizer/internal"
+	"github.com/nocturnecity/image-resizer/internal"
 	"os"
 	"os/signal"
 	"syscall"

@@ -12,7 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"giggster.com/resizer/pkg"
+	"github.com/nocturnecity/image-resizer/pkg"
 )
 
 type Server struct {
