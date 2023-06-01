@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"giggster.com/resizer/pkg"
 )
 
@@ -18,6 +21,21 @@ type Server struct {
 	server *http.Server
 }
 
+// Define a new Prometheus counter
+var resizeRequests = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "resize_requests_total",
+		Help: "Total number of resize requests received.",
+	},
+)
+
+var failedResizes = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "resize_failures_total",
+		Help: "Total number of failed resize operations.",
+	},
+)
+
 func (s *Server) Run() {
 	mux := http.NewServeMux()
 
@@ -25,6 +43,8 @@ func (s *Server) Run() {
 	mux.HandleFunc("/resize", s.resizeHandler)
 
 	mux.HandleFunc("/healthz", s.healthzHandler)
+
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Create a new HTTP server
 	server := &http.Server{
@@ -35,6 +55,9 @@ func (s *Server) Run() {
 	}
 
 	s.server = server
+
+	// Register it with Prometheus
+	prometheus.MustRegister(resizeRequests)
 
 	go func() {
 		s.logger.Info("ListenAndServe() on port: %d", s.port)
@@ -51,23 +74,28 @@ func (s *Server) Stop(ctx context.Context) {
 }
 
 func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
+	resizeRequests.Inc()
+
 	if !s.isValidRequest(w, r) {
 		return
 	}
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
+		failedResizes.Inc()
 		s.processHttpError(w, fmt.Errorf("error reading request body: %w", err), http.StatusBadRequest)
 		return
 	}
 	var req pkg.Request
 	err = json.Unmarshal(reqBody, &req)
 	if err != nil {
+		failedResizes.Inc()
 		s.processHttpError(w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
 		return
 	}
 	handler := NewResizeHandler(req, s.logger)
 	err = req.Validate()
 	if err != nil {
+		failedResizes.Inc()
 		s.processHttpError(w, fmt.Errorf("validation error: %w", err), http.StatusBadRequest)
 		return
 	}
@@ -75,6 +103,7 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := handler.ProcessRequest()
 	if err != nil {
 		go handler.CleanupOnError()
+		failedResizes.Inc()
 		s.processHttpError(w, fmt.Errorf("failed to process image: %w", err), http.StatusInternalServerError)
 		return
 	}
