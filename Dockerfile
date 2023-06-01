@@ -22,4 +22,4 @@ COPY --from=BUILDER /app/gigg-image-worker server
 COPY --from=BUILDER /app/watermark@2x.png watermark@2x.png
 RUN chmod +x server
 
-ENTRYPOINT ["./server"]
+ENTRYPOINT ["./server", "run"]
