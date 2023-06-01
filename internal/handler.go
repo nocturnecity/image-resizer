@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/google/uuid"
 
-	"github.com/nocturnecity/resizer/pkg"
+	"github.com/nocturnecity/image-resizer/pkg"
 )
 
 const DefaultWatermarkPath = "watermark@2x.png"
