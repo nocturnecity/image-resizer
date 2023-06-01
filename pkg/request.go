@@ -8,6 +8,7 @@ type Request struct {
 	Format       string `json:"format"`
 	BucketName   string `json:"bucket_name"`
 	Sizes        []Size `json:"sizes"`
+	Region       string `json:"region"`
 }
 
 func (req *Request) Validate() error {
@@ -33,6 +34,10 @@ func (req *Request) Validate() error {
 
 	if len(req.Sizes) <= 0 {
 		return fmt.Errorf("at least 1 size required")
+	}
+
+	if req.Region == "" {
+		return fmt.Errorf("AWS region is required field")
 	}
 
 	for i, size := range req.Sizes {

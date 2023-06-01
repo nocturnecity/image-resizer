@@ -3,11 +3,17 @@ package internal
 import (
 	"bufio"
 	"fmt"
-	"giggster.com/resizer/pkg"
-	"github.com/google/uuid"
 	"os"
 	"os/exec"
 	"strconv"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/google/uuid"
+
+	"giggster.com/resizer/pkg"
 )
 
 const DefaultWatermarkPath = "watermark@2x.png"
@@ -29,13 +35,14 @@ type ResizeHandler struct {
 	log             *StdLog
 	cleanUpFiles    []string
 	cleanUpAwsFiles []string
+	session         *session.Session
 }
 
 func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	defer rh.cleanup()
 	rh.log.Debug("Processing request %v", rh.Request)
 	originalFileName := rh.generateRandomFileName(rh.Request.Format)
-	err := rh.getFileFromAWS(rh.Request.BucketName, rh.Request.OriginalPath, originalFileName)
+	err := rh.downloadFromS3(rh.Request.BucketName, rh.Request.OriginalPath, originalFileName, rh.Request.Region)
 	if err != nil {
 		return nil, fmt.Errorf("process request error: %w", err)
 	}
@@ -59,7 +66,7 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 			return nil, fmt.Errorf("process request error: %w", err)
 		}
 		result[size.SizeName] = *info
-		err = rh.putFileToAWS(rh.Request.BucketName, path, toSave)
+		err = rh.uploadToS3(rh.Request.BucketName, path, toSave, rh.Request.Region)
 		if err != nil {
 			return nil, fmt.Errorf("process request error: %w", err)
 		}
@@ -123,30 +130,71 @@ func (rh *ResizeHandler) getSortSizes() []pkg.Size {
 	return rh.Request.Sizes // todo sort sizes
 }
 
-func (rh *ResizeHandler) getFileFromAWS(bucketName, path, result string) error {
-	cmd := exec.Command("aws", "s3", "cp", fmt.Sprintf("s3://%s/%s", bucketName, path), result)
-	rh.log.Debug(cmd.String())
-	res, err := cmd.CombinedOutput()
-	if string(res) != "" {
-		rh.log.Debug(string(res))
+func (rh *ResizeHandler) downloadFromS3(bucketName, path, result string, region string) error {
+	// Create a new AWS session
+	var err error
+	if rh.session == nil {
+		rh.session, err = session.NewSession(&aws.Config{
+			Region: aws.String(region), // replace with your desired region
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
 	}
+	// Create a new S3 manager
+	downloader := s3manager.NewDownloader(rh.session)
+
+	// Open a file for writing
+	file, err := os.Create(result)
 	if err != nil {
-		return fmt.Errorf("error get file from S3 %w", err)
+		return fmt.Errorf("failed to create file %q, %v", result, err)
 	}
+
+	// Download the object using the S3 manager
+	_, err = downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(path),
+		})
+	if err != nil {
+		return fmt.Errorf("failed to download file, %v", err)
+	}
+
 	rh.log.Debug("Receive file from S3 %s", path)
 	return nil
 }
 
-func (rh *ResizeHandler) putFileToAWS(bucketName, path, filename string) error {
-	cmd := exec.Command("aws", "s3", "cp", filename, fmt.Sprintf("s3://%s/%s", bucketName, path))
-	rh.log.Debug(cmd.String())
-	res, err := cmd.CombinedOutput()
-	if string(res) != "" {
-		rh.log.Debug(string(res))
+func (rh *ResizeHandler) uploadToS3(filename, bucketName, path string, region string) error {
+	// Create a new AWS session
+	// Create a new AWS session
+	var err error
+	if rh.session == nil {
+		rh.session, err = session.NewSession(&aws.Config{
+			Region: aws.String(region), // replace with your desired region
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create session: %w", err)
+		}
 	}
+	// Create a new S3 uploader
+	uploader := s3manager.NewUploader(rh.session)
+
+	// Open the file for reading
+	file, err := os.Open(filename)
 	if err != nil {
-		return fmt.Errorf("error put file to S3 %w", err)
+		return fmt.Errorf("failed to open file %q, %v", filename, err)
 	}
+
+	// Upload the file to S3
+	_, err = uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(path),
+		Body:   file,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload file, %v", err)
+	}
+
 	rh.log.Debug("Put file to S3 %s", path)
 	rh.cleanUpAwsFiles = append(rh.cleanUpAwsFiles, path)
 	return nil
