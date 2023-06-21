@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.20 AS BUILDER
+FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.19 AS BUILDER
 
 RUN mkdir -p /app
 WORKDIR /app
