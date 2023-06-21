@@ -9,9 +9,9 @@ COPY . .
 RUN CGO_ENABLED=1 CGO_CFLAGS_ALLOW="-Xpreprocessor" go build -o gigg-image-worker cmd/server/main.go
 
 
-FROM --platform=linux/amd64  dpokidov/imagemagick:latest
+FROM --platform=linux/amd64  dpokidov/imagemagick:7.1.1-10-ubuntu
 
-RUN apt-get update && apt-get install -y ca-certificates glibc-locale && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates
 
 COPY --from=BUILDER /app/gigg-image-worker server
 COPY --from=BUILDER /app/watermark@2x.png watermark@2x.png
