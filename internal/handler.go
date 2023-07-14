@@ -240,9 +240,10 @@ func (rh *ResizeHandler) uploadToS3(bucketName, path, filename string, region st
 
 	// Upload the file to S3
 	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(path),
-		Body:   file,
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(path),
+		Body:        file,
+		ContentType: aws.String("image/jpeg"),
 		// TODO: fix it changing Cloudfront settings
 		ACL: aws.String("public-read"),
 	})
