@@ -24,6 +24,12 @@ const DefaultWatermarkQuality = 100
 const DefaultWatermarkDissolve = "100"
 const DefaultResizerFilter = "Lanczos2"
 
+var formatToMimeType = map[string]string{
+	"jpeg": "image/jpeg",
+	"png":  "image/png",
+	"jpg":  "image/jpeg",
+}
+
 func NewResizeHandler(request pkg.Request, stdLog *StdLog) *ResizeHandler {
 	return &ResizeHandler{
 		Request:         request,
@@ -55,7 +61,7 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	}
 	result := map[string]pkg.ResultSize{}
 	var wg sync.WaitGroup
-	hassUploadError := false
+	hasUploadError := false
 	wg.Add(len(rh.Request.Sizes))
 	for _, size := range rh.getSortSizes() {
 		format := rh.Request.Format
@@ -75,16 +81,16 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 		originalFileName = newOriginal
 		go func() {
 			defer wg.Done()
-			err = rh.uploadToS3(rh.Request.BucketName, path, toSave, rh.Request.Region)
+			err = rh.uploadToS3(rh.Request.BucketName, format, path, toSave, rh.Request.Region)
 			if err != nil {
-				hassUploadError = true
+				hasUploadError = true
 				rh.log.Error("process request error: %w", err)
 			}
 		}()
 	}
 	wg.Wait()
 	rh.log.Debug("RESIZE COMPLETED for: %s", rh.Request.OriginalPath)
-	if hassUploadError {
+	if hasUploadError {
 		return nil, fmt.Errorf("process request error: files failed to uploade to S3")
 	}
 
@@ -217,8 +223,7 @@ func (rh *ResizeHandler) downloadFromS3(bucketName, path, result string, region 
 	return nil
 }
 
-func (rh *ResizeHandler) uploadToS3(bucketName, path, filename string, region string) error {
-	// Create a new AWS session
+func (rh *ResizeHandler) uploadToS3(bucketName, format, path, filename string, region string) error {
 	// Create a new AWS session
 	var err error
 	if rh.session == nil {
@@ -238,15 +243,21 @@ func (rh *ResizeHandler) uploadToS3(bucketName, path, filename string, region st
 		return fmt.Errorf("failed to open file %q, %v", filename, err)
 	}
 
-	// Upload the file to S3
-	_, err = uploader.Upload(&s3manager.UploadInput{
-		Bucket:      aws.String(bucketName),
-		Key:         aws.String(path),
-		Body:        file,
-		ContentType: aws.String("image/jpeg"),
+	uinp := &s3manager.UploadInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(path),
+		Body:   file,
 		// TODO: fix it changing Cloudfront settings
 		ACL: aws.String("public-read"),
-	})
+	}
+
+	mimeType := rh.getMimeTypeFromFormat(format)
+	if mimeType != "" {
+		uinp.ContentType = aws.String(mimeType)
+	}
+
+	// Upload the file to S3
+	_, err = uploader.Upload(uinp)
 	if err != nil {
 		return fmt.Errorf("failed to upload file, %v", err)
 	}
@@ -401,4 +412,13 @@ func (rh *ResizeHandler) getResultFileInfo(filename, path string) (*pkg.ResultSi
 	}
 
 	return imageInfo, nil
+}
+
+func (rh *ResizeHandler) getMimeTypeFromFormat(format string) string {
+	mt, ok := formatToMimeType[format]
+	if !ok {
+		return ""
+	}
+
+	return mt
 }
