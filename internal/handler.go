@@ -65,7 +65,9 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	wg.Add(len(rh.Request.Sizes))
 	for _, size := range rh.getSortSizes() {
 		format := rh.Request.Format
-		if !size.KeepFormat {
+		if size.Format != "" {
+			format = size.Format
+		} else if !size.KeepFormat {
 			format = DefaultJpegFormat
 		}
 		toSave, newOriginal, err := rh.processSize(originalFileName, format, size)

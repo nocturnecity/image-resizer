@@ -12,6 +12,7 @@ type Size struct {
 	CropOptions      *CropOptions      `json:"crop_options"`
 	WaterMarkOptions *WaterMarkOptions `json:"water_mark_options"`
 	KeepFormat       bool              `json:"keep_format"`
+	Format           string            `json:"format"`
 }
 
 type ResizeOptions struct {
