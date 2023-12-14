@@ -23,6 +23,7 @@ const DefaultWatermarkFormat = "png"
 const DefaultWatermarkQuality = 100
 const DefaultWatermarkDissolve = "100"
 const DefaultResizerFilter = "Lanczos2"
+const DefaultResizerCommandMemoryLimit = "50MB"
 
 var formatToMimeType = map[string]string{
 	"jpeg": "image/jpeg",
@@ -270,6 +271,9 @@ func (rh *ResizeHandler) uploadToS3(bucketName, format, path, filename string, r
 func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string) error {
 	cmd := exec.Command(
 		"convert",
+		"-limit",
+		"memory",
+		DefaultResizerCommandMemoryLimit,
 		filename,
 		"-auto-orient",
 		"-strip",
@@ -289,6 +293,9 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string) error {
 func (rh *ResizeHandler) resizeCommand(filename, result string, opt *pkg.ResizeOptions) error {
 	cmd := exec.Command(
 		"convert",
+		"-limit",
+		"memory",
+		DefaultResizerCommandMemoryLimit,
 		filename,
 		"-resize",
 		fmt.Sprintf("%dx%d", opt.X, opt.Y),
@@ -300,6 +307,9 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, opt *pkg.ResizeO
 	if opt.QuickResize {
 		cmd = exec.Command(
 			"convert",
+			"-limit",
+			"memory",
+			DefaultResizerCommandMemoryLimit,
 			filename,
 			"-scale",
 			fmt.Sprintf("%dx%d", opt.X, opt.Y),
@@ -323,6 +333,9 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, opt *pkg.ResizeO
 func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptions) error {
 	cmd := exec.Command(
 		"convert",
+		"-limit",
+		"memory",
+		DefaultResizerCommandMemoryLimit,
 		filename,
 		"-crop",
 		fmt.Sprintf("%dx%d+%d+%d", opt.Width, opt.Height, opt.X, opt.Y),

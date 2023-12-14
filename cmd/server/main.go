@@ -4,10 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/nocturnecity/image-resizer/internal"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/nocturnecity/image-resizer/internal"
 )
 
 const runCmd = "run"
@@ -28,7 +29,7 @@ func main() {
 	)
 
 	cmd := flag.NewFlagSet(runCmd, flag.ExitOnError)
-	cmd.StringVar(&logLVL, "loglvl", "debug", "set logging level: 'debug', 'info', 'error'")
+	cmd.StringVar(&logLVL, "loglvl", "info", "set logging level: 'debug', 'info', 'error'")
 	cmd.IntVar(&port, "port", defaultPort, "set HTTP server port")
 
 	if err := cmd.Parse(args); err != nil {
