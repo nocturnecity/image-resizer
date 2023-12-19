@@ -17,7 +17,7 @@ import (
 	"github.com/nocturnecity/image-resizer/pkg"
 )
 
-const DefaultWatermarkPath = "watermark@2x.png"
+const DefaultWatermarkPath = "watermark@4x.png"
 const DefaultJpegFormat = "jpeg"
 const DefaultWatermarkFormat = "png"
 const DefaultWatermarkQuality = 100
