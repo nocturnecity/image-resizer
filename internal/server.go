@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +17,10 @@ import (
 )
 
 type Server struct {
-	port   int
-	logger *StdLog
-	server *http.Server
+	port              int
+	watermarkProvider *WatermarkProvider
+	logger            *StdLog
+	server            *http.Server
 }
 
 // Define a new Prometheus counter
@@ -68,7 +70,7 @@ func (s *Server) Run() {
 
 	go func() {
 		s.logger.Info("ListenAndServe() on port: %d", s.port)
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			s.logger.Fatal("ListenAndServe(): %v", err)
 		}
 	}()
@@ -78,6 +80,8 @@ func (s *Server) Stop(ctx context.Context) {
 	if err := s.server.Shutdown(ctx); err != nil {
 		s.logger.Error("HTTP server Shutdown: %v", err)
 	}
+	s.watermarkProvider.ShutDown()
+	s.logger.Info("Application stopped")
 }
 
 func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +104,7 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 		s.processHttpError(w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
 		return
 	}
-	handler := NewResizeHandler(req, s.logger)
+	handler := NewResizeHandler(req, s.logger, s.watermarkProvider)
 	err = req.Validate()
 	if err != nil {
 		failedResizes.Inc()
@@ -164,7 +168,7 @@ func (s *Server) processHttpSuccess(w http.ResponseWriter, sizes map[string]pkg.
 	}
 }
 
-func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) healthzHandler(w http.ResponseWriter, _ *http.Request) {
 	// You can add any logic here to check your application's health
 	// For simplicity, this handler will always return HTTP 200 OK
 	w.WriteHeader(http.StatusOK)
@@ -172,7 +176,8 @@ func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 func NewHttpServer(port int, logger *StdLog) *Server {
 	return &Server{
-		port:   port,
-		logger: logger,
+		port:              port,
+		logger:            logger,
+		watermarkProvider: NewWatermarkProvider(logger),
 	}
 }
