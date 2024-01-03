@@ -17,9 +17,7 @@ import (
 	"github.com/nocturnecity/image-resizer/pkg"
 )
 
-const DefaultWatermarkPath = "watermark@4x.png"
 const DefaultJpegFormat = "jpeg"
-const DefaultWatermarkFormat = "png"
 const DefaultWatermarkQuality = 100
 const DefaultWatermarkDissolve = "100"
 const DefaultResizerFilter = "Lanczos2"
@@ -28,23 +26,26 @@ var formatToMimeType = map[string]string{
 	"jpeg": "image/jpeg",
 	"png":  "image/png",
 	"jpg":  "image/jpeg",
+	"webp": "image/webp",
 }
 
-func NewResizeHandler(request pkg.Request, stdLog *StdLog) *ResizeHandler {
+func NewResizeHandler(request pkg.Request, stdLog *StdLog, provider *WatermarkProvider) *ResizeHandler {
 	return &ResizeHandler{
-		Request:         request,
-		log:             stdLog,
-		cleanUpFiles:    sync.Map{},
-		cleanUpAwsFiles: sync.Map{},
+		Request:           request,
+		log:               stdLog,
+		cleanUpFiles:      sync.Map{},
+		cleanUpAwsFiles:   sync.Map{},
+		watermarkProvider: provider,
 	}
 }
 
 type ResizeHandler struct {
-	Request         pkg.Request
-	log             *StdLog
-	cleanUpFiles    sync.Map
-	cleanUpAwsFiles sync.Map
-	session         *session.Session
+	Request           pkg.Request
+	log               *StdLog
+	watermarkProvider *WatermarkProvider
+	cleanUpFiles      sync.Map
+	cleanUpAwsFiles   sync.Map
+	session           *session.Session
 }
 
 func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
@@ -342,8 +343,12 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 }
 
 func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.WaterMarkOptions) error {
-	watermarkImage := rh.generateRandomFileName(DefaultWatermarkFormat)
-	err := rh.resizeCommand(DefaultWatermarkPath, watermarkImage, &pkg.ResizeOptions{
+	watermarkPath, watermarkFormat, err := rh.watermarkProvider.GetWatermark(opt.WatermarkImageURL)
+	if err != nil {
+		return fmt.Errorf("error add watermark to file %w", err)
+	}
+	watermarkImage := rh.generateRandomFileName(watermarkFormat)
+	err = rh.resizeCommand(watermarkPath, watermarkImage, &pkg.ResizeOptions{
 		ImageQuality: DefaultWatermarkQuality,
 		QuickResize:  false,
 		X:            opt.Width,

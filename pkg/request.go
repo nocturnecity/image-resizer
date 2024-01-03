@@ -48,6 +48,10 @@ func (req *Request) Validate() error {
 		if size.ResizeOptions == nil {
 			return fmt.Errorf("sizes[%d].resize_options is required field", i)
 		}
+
+		if size.WaterMarkOptions != nil && size.WaterMarkOptions.WatermarkImageURL == "" {
+			return fmt.Errorf("sizes[%d].water_mark_options.water_mark_image_url is required field", i)
+		}
 	}
 
 	return nil
