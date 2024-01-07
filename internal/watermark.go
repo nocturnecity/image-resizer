@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,7 +61,12 @@ func (wp *WatermarkProvider) downloadWatermarkFile(url string) (string, string, 
 	if response.StatusCode != http.StatusOK {
 		return "", "", fmt.Errorf("unexpected status code: %d", response.StatusCode)
 	}
-	tempFile, err := os.CreateTemp("", fmt.Sprintf("%s.%s", uuid.New(), DefaultJpegFormat))
+	watermarkFormat, err := getFileExtensionFromUrl(url)
+	if err != nil {
+		wp.log.Error("can't identify watermark image format: %w", err)
+		watermarkFormat = DefaultJpegFormat
+	}
+	tempFile, err := os.CreateTemp("", fmt.Sprintf("%s.%s", uuid.New(), watermarkFormat))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create temporary file: %v", err)
 	}
@@ -186,4 +193,16 @@ func runJanitor(c *watermarkCache, ci time.Duration) {
 	}
 	c.j = j
 	go j.Run(c)
+}
+
+func getFileExtensionFromUrl(rawUrl string) (string, error) {
+	u, err := url.Parse(rawUrl)
+	if err != nil {
+		return "", err
+	}
+	pos := strings.LastIndex(u.Path, ".")
+	if pos == -1 {
+		return "", fmt.Errorf("couldn't find a period to indicate a file extension")
+	}
+	return u.Path[pos+1 : len(u.Path)], nil
 }

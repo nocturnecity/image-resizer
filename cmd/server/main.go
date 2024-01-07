@@ -54,6 +54,7 @@ func main() {
 	}
 
 	go server.Run()
+	defer server.Stop(ctx)
 	// Wait for interrupt signal
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
@@ -61,9 +62,8 @@ func main() {
 	// Wait for the interrupt signal or for both servers to finish
 	select {
 	case <-interrupt:
-		fmt.Println("Interrupt signal received, shutting down servers...")
+		stdLog.Info("Interrupt signal received, shutting down servers...")
 	case <-ctx.Done():
-		fmt.Println("Context canceled, shutting down servers...")
+		stdLog.Info("Context canceled, shutting down servers...")
 	}
-	server.Stop(ctx)
 }

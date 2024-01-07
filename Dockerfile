@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.19 AS BUILDER
+FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.20 AS BUILDER
 
 RUN mkdir -p /app
 WORKDIR /app
@@ -14,7 +14,6 @@ FROM --platform=linux/amd64  dpokidov/imagemagick:7.1.1-10-ubuntu
 RUN apt-get update && apt-get install -y ca-certificates
 
 COPY --from=BUILDER /app/gigg-image-worker server
-COPY --from=BUILDER /app/watermark@4x.png watermark@4x.png
 
 RUN chmod +x server
 
