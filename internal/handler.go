@@ -103,7 +103,7 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 
 func (rh *ResizeHandler) processSize(originalFilename, format string, size pkg.Size) (string, string, error) {
 	resizedFileName := rh.generateRandomFileName(format)
-	err := rh.resizeCommand(originalFilename, resizedFileName, size.ResizeOptions)
+	err := rh.resizeCommand(originalFilename, resizedFileName, true, size.ResizeOptions)
 	if err != nil {
 		return "", "", err
 	}
@@ -293,40 +293,52 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string) error {
 	return nil
 }
 
-func (rh *ResizeHandler) resizeCommand(filename, result string, opt *pkg.ResizeOptions) error {
-	cmd := exec.Command(
-		"convert",
+func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground bool, opt *pkg.ResizeOptions) error {
+	commonArgs := []string{
 		"-limit",
 		"memory",
 		DefaultResizerCommandMemoryLimit,
 		filename,
-		"-fill",
-		"white",
-		"-opaque",
-		"none",
-		"-resize",
-		fmt.Sprintf("%dx%d", opt.X, opt.Y),
-		"-filter",
-		DefaultResizerFilter,
-		"-quality",
-		fmt.Sprintf("%d", opt.ImageQuality),
-		result)
-	if opt.QuickResize {
-		cmd = exec.Command(
-			"convert",
-			"-limit",
-			"memory",
-			DefaultResizerCommandMemoryLimit,
-			filename,
+	}
+
+	if forceBackground {
+		commonArgs = append(commonArgs, []string{
 			"-fill",
 			"white",
 			"-opaque",
 			"none",
-			"-scale",
-			fmt.Sprintf("%dx%d", opt.X, opt.Y),
-			"-quality",
-			fmt.Sprintf("%d", opt.ImageQuality),
-			result)
+		}...)
+	}
+
+	cmd := exec.Command(
+		"convert",
+		append(
+			commonArgs,
+			[]string{
+				"-resize",
+				fmt.Sprintf("%dx%d", opt.X, opt.Y),
+				"-filter",
+				DefaultResizerFilter,
+				"-quality",
+				fmt.Sprintf("%d", opt.ImageQuality),
+				result,
+			}...,
+		)...,
+	)
+	if opt.QuickResize {
+		cmd = exec.Command(
+			"convert",
+			append(
+				commonArgs,
+				[]string{
+					"-scale",
+					fmt.Sprintf("%dx%d", opt.X, opt.Y),
+					"-quality",
+					fmt.Sprintf("%d", opt.ImageQuality),
+					result,
+				}...,
+			)...,
+		)
 	}
 	rh.log.Debug(cmd.String())
 	res, err := cmd.CombinedOutput()
@@ -369,7 +381,7 @@ func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.Wate
 		return fmt.Errorf("error add watermark to file %w", err)
 	}
 	watermarkImage := rh.generateRandomFileName(watermarkFormat)
-	err = rh.resizeCommand(watermarkPath, watermarkImage, &pkg.ResizeOptions{
+	err = rh.resizeCommand(watermarkPath, watermarkImage, false, &pkg.ResizeOptions{
 		ImageQuality: DefaultWatermarkQuality,
 		QuickResize:  false,
 		X:            opt.Width,
