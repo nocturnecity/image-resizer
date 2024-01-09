@@ -9,7 +9,7 @@ COPY . .
 RUN CGO_ENABLED=1 CGO_CFLAGS_ALLOW="-Xpreprocessor" go build -o gigg-image-worker cmd/server/main.go
 
 
-FROM --platform=linux/amd64  dpokidov/imagemagick:7.1.1-10-ubuntu
+FROM --platform=linux/amd64  dpokidov/imagemagick:7.1.1-24-bookworm
 
 RUN apt-get update && apt-get install -y ca-certificates
 
