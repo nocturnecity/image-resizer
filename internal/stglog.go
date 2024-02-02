@@ -26,8 +26,8 @@ func NewStdLog(opts ...Option) *StdLog {
 	l := &StdLog{
 		fatal: log.New(os.Stderr, "\033[31mFATAL\033[0m: ", log.Ldate|log.Ltime),
 		err:   log.New(os.Stderr, "\033[31mERR\033[0m: ", log.Ldate|log.Ltime),
-		inf:   log.New(os.Stderr, "\033[32mINF\033[0m: ", log.Ldate|log.Ltime),
-		dbg:   log.New(os.Stderr, "\033[35mDBG\033[0m: ", log.Ldate|log.Ltime),
+		inf:   log.New(os.Stdout, "\033[32mINF\033[0m: ", log.Ldate|log.Ltime),
+		dbg:   log.New(os.Stdout, "\033[35mDBG\033[0m: ", log.Ldate|log.Ltime),
 		lvl:   INF,
 	}
 	for _, opt := range opts {
