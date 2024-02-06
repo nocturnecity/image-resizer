@@ -3,6 +3,17 @@ entries:
   gigg-resizer:
   - apiVersion: v2
     appVersion: 1.16.1
+    created: "2024-02-06T20:48:28.054843999Z"
+    description: A Helm chart for Kubernetes
+    digest: 17d9349b4e7cdbb8001afb19da5dd4c89aa04a01f29e545672563a345a7071e4
+    icon: https://helm.sh/img/helm.svg
+    name: gigg-resizer
+    type: application
+    urls:
+    - https://github.com/nocturnecity/image-resizer/releases/download/gigg-resizer-0.3.8/gigg-resizer-0.3.8.tgz
+    version: 0.3.8
+  - apiVersion: v2
+    appVersion: 1.16.1
     created: "2024-01-09T16:13:43.215679433Z"
     description: A Helm chart for Kubernetes
     digest: d978b1abb3cfb100872a2d4078c6f0dfd843a41e7e9a251457c8f8903f31dd1e
@@ -133,4 +144,4 @@ entries:
     urls:
     - https://github.com/nocturnecity/image-resizer/releases/download/gigg-resizer-0.1.2/gigg-resizer-0.1.2.tgz
     version: 0.1.2
-generated: "2024-01-09T16:13:43.215749685Z"
+generated: "2024-02-06T20:48:28.054938917Z"
