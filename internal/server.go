@@ -21,6 +21,7 @@ type Server struct {
 	watermarkProvider *WatermarkProvider
 	logger            *StdLog
 	server            *http.Server
+	timeout           time.Duration
 }
 
 // Define a new Prometheus counter
@@ -58,15 +59,17 @@ func (s *Server) Run() {
 	// Create a new HTTP server
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", s.port),
-		Handler:      mux,              // set router
-		ReadTimeout:  60 * time.Second, // set read timeout
-		WriteTimeout: 60 * time.Second, // set write timeout
+		Handler:      mux,       // set router
+		ReadTimeout:  s.timeout, // set read timeout
+		WriteTimeout: s.timeout, // set write timeout
 	}
 
 	s.server = server
 
 	// Register it with Prometheus
 	prometheus.MustRegister(resizeRequests)
+	prometheus.MustRegister(failedResizes)
+	prometheus.MustRegister(resizeDuration)
 
 	go func() {
 		s.logger.Info("ListenAndServe() on port: %d", s.port)
@@ -94,21 +97,21 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		failedResizes.Inc()
-		s.processHttpError(w, fmt.Errorf("error reading request body: %w", err), http.StatusBadRequest)
+		s.processHttpError(r, w, fmt.Errorf("error reading request body: %w", err), http.StatusBadRequest)
 		return
 	}
 	var req pkg.Request
 	err = json.Unmarshal(reqBody, &req)
 	if err != nil {
 		failedResizes.Inc()
-		s.processHttpError(w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
+		s.processHttpError(r, w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
 		return
 	}
 	handler := NewResizeHandler(req, s.logger, s.watermarkProvider)
 	err = req.Validate()
 	if err != nil {
 		failedResizes.Inc()
-		s.processHttpError(w, fmt.Errorf("validation error: %w", err), http.StatusBadRequest)
+		s.processHttpError(r, w, fmt.Errorf("validation error: %w", err), http.StatusBadRequest)
 		return
 	}
 	defer handler.Cleanup()
@@ -116,31 +119,31 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		go handler.CleanupOnError()
 		failedResizes.Inc()
-		s.processHttpError(w, fmt.Errorf("failed to process image: %w", err), http.StatusInternalServerError)
+		s.processHttpError(r, w, fmt.Errorf("failed to process image: %w", err), http.StatusInternalServerError)
 		return
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
 	resizeDuration.Observe(durationMs)
-	s.processHttpSuccess(w, res)
+	s.processHttpSuccess(r, w, res)
 }
 
 func (s *Server) isValidRequest(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != "POST" {
-		s.processHttpError(w, fmt.Errorf("invalid http method: %s", r.Method), http.StatusNotFound)
+		s.processHttpError(r, w, fmt.Errorf("invalid http method: %s", r.Method), http.StatusNotFound)
 		return false
 	}
 
 	contentType := r.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
-		s.processHttpError(w, fmt.Errorf("invalid content type: %s", contentType), http.StatusUnsupportedMediaType)
+		s.processHttpError(r, w, fmt.Errorf("invalid content type: %s", contentType), http.StatusUnsupportedMediaType)
 		return false
 	}
 
 	return true
 }
 
-func (s *Server) processHttpError(w http.ResponseWriter, err error, status int) {
-	s.logger.Error(err.Error())
+func (s *Server) processHttpError(r *http.Request, w http.ResponseWriter, err error, status int) {
+	s.logger.Error("%s %s error %v", r.Method, r.URL, err.Error())
 	response := pkg.ErrorResponse{
 		Error: err.Error(),
 	}
@@ -156,28 +159,32 @@ func (s *Server) processHttpError(w http.ResponseWriter, err error, status int) 
 	}
 }
 
-func (s *Server) processHttpSuccess(w http.ResponseWriter, sizes map[string]pkg.ResultSize) {
+func (s *Server) processHttpSuccess(r *http.Request, w http.ResponseWriter, sizes map[string]pkg.ResultSize) {
 	response := pkg.Response{
 		Sizes: sizes,
 	}
+	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(response)
 	if err != nil {
-		s.processHttpError(w, err, http.StatusInternalServerError)
+		s.processHttpError(r, w, err, http.StatusInternalServerError)
 		return
 	}
+	s.logger.Info("%s %s %d", r.Method, r.URL, http.StatusOK)
 }
 
-func (s *Server) healthzHandler(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
 	// You can add any logic here to check your application's health
 	// For simplicity, this handler will always return HTTP 200 OK
 	w.WriteHeader(http.StatusOK)
+	s.logger.Info("%s %s %d", r.Method, r.URL, http.StatusOK)
 }
 
-func NewHttpServer(port int, logger *StdLog) *Server {
+func NewHttpServer(port int, timeout time.Duration, logger *StdLog) *Server {
 	return &Server{
 		port:              port,
 		logger:            logger,
+		timeout:           timeout,
 		watermarkProvider: NewWatermarkProvider(logger),
 	}
 }

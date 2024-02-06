@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nocturnecity/image-resizer/internal"
 )
 
 const runCmd = "run"
 const defaultPort = 8080
+const defaultTimeout = 90
 
 func main() {
 	flag.Parse()
@@ -24,13 +26,15 @@ func main() {
 	cmdName := os.Args[1]
 	args := os.Args[2:]
 	var (
-		logLVL string
-		port   int
+		logLVL  string
+		port    int
+		timeout int
 	)
 
 	cmd := flag.NewFlagSet(runCmd, flag.ExitOnError)
 	cmd.StringVar(&logLVL, "loglvl", "info", "set logging level: 'debug', 'info', 'error'")
 	cmd.IntVar(&port, "port", defaultPort, "set HTTP server port")
+	cmd.IntVar(&timeout, "timeout", defaultTimeout, "set HTTP server timeout seconds")
 
 	if err := cmd.Parse(args); err != nil {
 		fmt.Printf("resizer: error parsing arguments: '%v'\n", err)
@@ -48,7 +52,7 @@ func main() {
 	var server *internal.Server
 	switch cmdName {
 	case runCmd:
-		server = internal.NewHttpServer(port, stdLog)
+		server = internal.NewHttpServer(port, time.Duration(timeout)*time.Second, stdLog)
 	default:
 		stdLog.Fatal("Unknown sub-command: %s\n", args[0])
 	}
