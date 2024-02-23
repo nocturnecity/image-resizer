@@ -124,6 +124,7 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
 	resizeDuration.Observe(durationMs)
+	s.logger.Debug("RESIZE OBSERVED EXECUTION TIME FOR %s: %.2f sec", req.OriginalPath, durationMs/1000)
 	s.processHttpSuccess(r, w, res)
 }
 

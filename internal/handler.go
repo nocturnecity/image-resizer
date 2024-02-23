@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -57,7 +58,9 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 		return nil, fmt.Errorf("process request error: %w", err)
 	}
 	rh.log.Debug("RESIZE STARTED for: %s", rh.Request.OriginalPath)
-	err = rh.stripAndRotateOriginal(originalFileName, originalFileName)
+	sortedSizes := rh.getSortSizes()
+	// resize options is required field
+	err = rh.stripAndRotateOriginal(originalFileName, originalFileName, *sortedSizes[0].ResizeOptions)
 	if err != nil {
 		return nil, fmt.Errorf("process request error: %w", err)
 	}
@@ -65,7 +68,7 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	var wg sync.WaitGroup
 	hasUploadError := false
 	wg.Add(len(rh.Request.Sizes))
-	for _, size := range rh.getSortSizes() {
+	for _, size := range sortedSizes {
 		format := rh.Request.Format
 		if size.Format != "" {
 			format = size.Format
@@ -271,18 +274,22 @@ func (rh *ResizeHandler) uploadToS3(bucketName, format, path, filename string, r
 	return nil
 }
 
-func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string) error {
+func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg.ResizeOptions) error {
+	start := time.Now()
 	cmd := exec.Command(
 		"convert",
 		"-limit",
 		"memory",
 		DefaultResizerCommandMemoryLimit,
 		filename,
+		"-resize",
+		fmt.Sprintf("%dx%d", opt.X, opt.Y),
 		"-auto-orient",
 		"-strip",
 		result)
-	rh.log.Debug(cmd.String())
 	res, err := cmd.CombinedOutput()
+	durationMs := float64(time.Since(start).Milliseconds())
+	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
 		rh.log.Debug(string(res))
 	}
@@ -294,6 +301,7 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string) error {
 }
 
 func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground bool, opt *pkg.ResizeOptions) error {
+	start := time.Now()
 	commonArgs := []string{
 		"-limit",
 		"memory",
@@ -340,8 +348,9 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 			)...,
 		)
 	}
-	rh.log.Debug(cmd.String())
 	res, err := cmd.CombinedOutput()
+	durationMs := float64(time.Since(start).Milliseconds())
+	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
 		rh.log.Debug(string(res))
 	}
@@ -354,6 +363,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 }
 
 func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptions) error {
+	start := time.Now()
 	cmd := exec.Command(
 		"convert",
 		"-limit",
@@ -363,8 +373,9 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 		"-crop",
 		fmt.Sprintf("%dx%d+%d+%d", opt.Width, opt.Height, opt.X, opt.Y),
 		result)
-	rh.log.Debug(cmd.String())
 	res, err := cmd.CombinedOutput()
+	durationMs := float64(time.Since(start).Milliseconds())
+	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
 		rh.log.Debug(string(res))
 	}
@@ -376,6 +387,7 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 }
 
 func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.WaterMarkOptions) error {
+	start := time.Now()
 	watermarkPath, watermarkFormat, err := rh.watermarkProvider.GetWatermark(opt.WatermarkImageURL)
 	if err != nil {
 		return fmt.Errorf("error add watermark to file %w", err)
@@ -401,8 +413,9 @@ func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.Wate
 		watermarkImage,
 		filename,
 		result)
-	rh.log.Debug(cmd.String())
 	res, err := cmd.CombinedOutput()
+	durationMs := float64(time.Since(start).Milliseconds())
+	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
 		rh.log.Debug(string(res))
 	}
