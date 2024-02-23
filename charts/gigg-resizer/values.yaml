@@ -7,12 +7,16 @@ replicaCount: 1
 loglvl: "info"
 timeoutSeconds: 90
 memoryLimit: 250
+externalStorage:
+  enabled: false
+  mountPath: ""
+  size: ""
 
 image:
   repository: random1st/imagemagick
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0.3.10"
+  tag: "0.3.11"
 
 imagePullSecrets: []
 nameOverride: ""
