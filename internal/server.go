@@ -22,6 +22,7 @@ type Server struct {
 	logger            *StdLog
 	server            *http.Server
 	timeout           time.Duration
+	resizeMemoryLimit int
 }
 
 // Define a new Prometheus counter
@@ -107,7 +108,7 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 		s.processHttpError(r, w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
 		return
 	}
-	handler := NewResizeHandler(req, s.logger, s.watermarkProvider)
+	handler := NewResizeHandler(req, s.logger, s.watermarkProvider, ResizerConfig{MemoryMB: s.resizeMemoryLimit, TimeoutSec: int(s.timeout.Seconds())})
 	err = req.Validate()
 	if err != nil {
 		failedResizes.Inc()
@@ -181,11 +182,12 @@ func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("%s %s %d", r.Method, r.URL, http.StatusOK)
 }
 
-func NewHttpServer(port int, timeout time.Duration, logger *StdLog) *Server {
+func NewHttpServer(port int, timeout time.Duration, memoryLimit int, logger *StdLog) *Server {
 	return &Server{
 		port:              port,
 		logger:            logger,
 		timeout:           timeout,
+		resizeMemoryLimit: memoryLimit,
 		watermarkProvider: NewWatermarkProvider(logger),
 	}
 }

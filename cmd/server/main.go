@@ -15,6 +15,8 @@ import (
 const runCmd = "run"
 const defaultPort = 8080
 const defaultTimeout = 90
+const defaultMemoryLimit = 250
+const defaultLogLvl = "info"
 
 func main() {
 	flag.Parse()
@@ -26,15 +28,17 @@ func main() {
 	cmdName := os.Args[1]
 	args := os.Args[2:]
 	var (
-		logLVL  string
-		port    int
-		timeout int
+		logLVL      string
+		port        int
+		timeout     int
+		memoryLimit int
 	)
 
 	cmd := flag.NewFlagSet(runCmd, flag.ExitOnError)
-	cmd.StringVar(&logLVL, "loglvl", "info", "set logging level: 'debug', 'info', 'error'")
-	cmd.IntVar(&port, "port", defaultPort, "set HTTP server port")
-	cmd.IntVar(&timeout, "timeout", defaultTimeout, "set HTTP server timeout seconds")
+	cmd.StringVar(&logLVL, "loglvl", defaultLogLvl, fmt.Sprintf("set logging level: 'debug', 'info', 'error' (default %s)", defaultLogLvl))
+	cmd.IntVar(&memoryLimit, "memory-limit", defaultMemoryLimit, fmt.Sprintf("set MB memory limit per command (default %d)", defaultMemoryLimit))
+	cmd.IntVar(&port, "port", defaultPort, fmt.Sprintf("set HTTP server port (default %d)", defaultPort))
+	cmd.IntVar(&timeout, "timeout", defaultTimeout, fmt.Sprintf("set HTTP server timeout seconds (default %d)", defaultTimeout))
 
 	if err := cmd.Parse(args); err != nil {
 		fmt.Printf("resizer: error parsing arguments: '%v'\n", err)
@@ -52,7 +56,7 @@ func main() {
 	var server *internal.Server
 	switch cmdName {
 	case runCmd:
-		server = internal.NewHttpServer(port, time.Duration(timeout)*time.Second, stdLog)
+		server = internal.NewHttpServer(port, time.Duration(timeout)*time.Second, memoryLimit, stdLog)
 	default:
 		stdLog.Fatal("Unknown sub-command: %s\n", args[0])
 	}

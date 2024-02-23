@@ -37,6 +37,7 @@ spec:
             - "--port={{ .Values.service.port }}"
             - "--timeout={{ .Values.timeoutSeconds }}"
             - "--loglvl={{ .Values.loglvl }}"
+            - "--memory-limit={{ .Values.memoryLimit }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

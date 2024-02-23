@@ -22,7 +22,8 @@ const DefaultJpegFormat = "jpeg"
 const DefaultWatermarkQuality = 100
 const DefaultWatermarkDissolve = "100"
 const DefaultResizerFilter = "Lanczos2"
-const DefaultResizerCommandMemoryLimit = "50MB"
+const DefaultResizerCommandMemoryLimit = 250
+const DefaultResizerCommandTimeLimit = 45
 
 var formatToMimeType = map[string]string{
 	"jpeg": "image/jpeg",
@@ -31,14 +32,29 @@ var formatToMimeType = map[string]string{
 	"webp": "image/webp",
 }
 
-func NewResizeHandler(request pkg.Request, stdLog *StdLog, provider *WatermarkProvider) *ResizeHandler {
+func NewResizeHandler(request pkg.Request, stdLog *StdLog, provider *WatermarkProvider, config ResizerConfig) *ResizeHandler {
+	if config.TimeoutSec == 0 {
+		config.TimeoutSec = DefaultResizerCommandTimeLimit
+	}
+
+	if config.MemoryMB == 0 {
+		config.MemoryMB = DefaultResizerCommandMemoryLimit
+	}
+
 	return &ResizeHandler{
 		Request:           request,
 		log:               stdLog,
 		cleanUpFiles:      sync.Map{},
 		cleanUpAwsFiles:   sync.Map{},
 		watermarkProvider: provider,
+		memoryLimit:       fmt.Sprintf("%dMB", config.MemoryMB),
+		timeout:           strconv.Itoa(config.TimeoutSec),
 	}
+}
+
+type ResizerConfig struct {
+	MemoryMB   int
+	TimeoutSec int
 }
 
 type ResizeHandler struct {
@@ -48,6 +64,8 @@ type ResizeHandler struct {
 	cleanUpFiles      sync.Map
 	cleanUpAwsFiles   sync.Map
 	session           *session.Session
+	memoryLimit       string
+	timeout           string
 }
 
 func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
@@ -280,7 +298,10 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg
 		"convert",
 		"-limit",
 		"memory",
-		DefaultResizerCommandMemoryLimit,
+		rh.memoryLimit,
+		"-limit",
+		"time",
+		rh.timeout,
 		filename,
 		"-resize",
 		fmt.Sprintf("%dx%d", opt.X, opt.Y),
@@ -294,7 +315,7 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error strip original %w", err)
+		return fmt.Errorf("error strip original %w, command ourput: %s", err, res)
 	}
 
 	return nil
@@ -305,7 +326,10 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 	commonArgs := []string{
 		"-limit",
 		"memory",
-		DefaultResizerCommandMemoryLimit,
+		rh.memoryLimit,
+		"-limit",
+		"time",
+		rh.timeout,
 		filename,
 	}
 
@@ -355,7 +379,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error resize file %w", err)
+		return fmt.Errorf("error resize file %w, command ourput: %s", err, res)
 
 	}
 
@@ -368,7 +392,10 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 		"convert",
 		"-limit",
 		"memory",
-		DefaultResizerCommandMemoryLimit,
+		rh.memoryLimit,
+		"-limit",
+		"time",
+		rh.timeout,
 		filename,
 		"-crop",
 		fmt.Sprintf("%dx%d+%d+%d", opt.Width, opt.Height, opt.X, opt.Y),
@@ -380,7 +407,7 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error crop file %w", err)
+		return fmt.Errorf("error crop file %w, command ourput: %s", err, res)
 	}
 
 	return nil
@@ -420,7 +447,7 @@ func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.Wate
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error add watermark to file %w", err)
+		return fmt.Errorf("error add watermark to file %w, command ourput: %s", err, res)
 	}
 
 	return nil
