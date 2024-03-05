@@ -17,13 +17,14 @@ import (
 )
 
 type Server struct {
-	port                   int
-	watermarkProvider      *WatermarkProvider
-	logger                 *StdLog
-	server                 *http.Server
-	timeout                time.Duration
-	resizeMemoryLimit      int
-	resizeWorkingDirectory string
+	port              int
+	watermarkProvider *WatermarkProvider
+	logger            *StdLog
+	server            *http.Server
+	pool              *Pool
+	timeout           time.Duration
+	resizeMemoryLimit int
+	workersCount      int
 }
 
 // Define a new Prometheus counter
@@ -73,9 +74,12 @@ func (s *Server) Run() {
 	prometheus.MustRegister(failedResizes)
 	prometheus.MustRegister(resizeDuration)
 
+	s.pool = NewPool(s.logger, s.workersCount)
+	s.pool.Run()
 	go func() {
 		s.logger.Info("ListenAndServe() on port: %d", s.port)
 		if err := server.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			s.Stop(context.Background())
 			s.logger.Fatal("ListenAndServe(): %v", err)
 		}
 	}()
@@ -85,6 +89,7 @@ func (s *Server) Stop(ctx context.Context) {
 	if err := s.server.Shutdown(ctx); err != nil {
 		s.logger.Error("HTTP server Shutdown: %v", err)
 	}
+	s.pool.ShutDown()
 	s.watermarkProvider.ShutDown()
 	s.logger.Info("Application stopped")
 }
@@ -109,16 +114,23 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 		s.processHttpError(r, w, fmt.Errorf("error unmarshal request: %w", err), http.StatusBadRequest)
 		return
 	}
-	handler := NewResizeHandler(req, s.logger, s.watermarkProvider,
-		ResizerConfig{WorkDirectory: s.resizeWorkingDirectory, MemoryMB: s.resizeMemoryLimit, TimeoutSec: int(s.timeout.Seconds())})
 	err = req.Validate()
 	if err != nil {
 		failedResizes.Inc()
 		s.processHttpError(r, w, fmt.Errorf("validation error: %w", err), http.StatusBadRequest)
 		return
 	}
+
+	handler := NewResizeHandler(req, s.logger, s.watermarkProvider,
+		ResizerConfig{MemoryMB: s.resizeMemoryLimit, TimeoutSec: int(s.timeout.Seconds())})
 	defer handler.Cleanup()
-	res, err := handler.ProcessRequest()
+	resChan := make(chan jobResult)
+	s.pool.Dispatch(job{
+		h: handler,
+		c: resChan,
+	})
+	poolRes := <-resChan
+	res, err := poolRes.result, poolRes.err
 	if err != nil {
 		go handler.CleanupOnError()
 		failedResizes.Inc()
@@ -184,13 +196,13 @@ func (s *Server) healthzHandler(w http.ResponseWriter, r *http.Request) {
 	s.logger.Info("%s %s %d", r.Method, r.URL, http.StatusOK)
 }
 
-func NewHttpServer(port int, timeout time.Duration, memoryLimit int, workingDirectory string, logger *StdLog) *Server {
+func NewHttpServer(port int, timeout time.Duration, memoryLimit, workersCount int, logger *StdLog) *Server {
 	return &Server{
-		port:                   port,
-		logger:                 logger,
-		timeout:                timeout,
-		resizeMemoryLimit:      memoryLimit,
-		resizeWorkingDirectory: workingDirectory,
-		watermarkProvider:      NewWatermarkProvider(logger),
+		port:              port,
+		logger:            logger,
+		timeout:           timeout,
+		resizeMemoryLimit: memoryLimit,
+		workersCount:      workersCount,
+		watermarkProvider: NewWatermarkProvider(logger),
 	}
 }

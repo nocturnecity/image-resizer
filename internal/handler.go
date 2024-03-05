@@ -49,14 +49,12 @@ func NewResizeHandler(request pkg.Request, stdLog *StdLog, provider *WatermarkPr
 		watermarkProvider: provider,
 		memoryLimit:       fmt.Sprintf("%dMB", config.MemoryMB),
 		timeout:           strconv.Itoa(config.TimeoutSec),
-		directory:         config.WorkDirectory,
 	}
 }
 
 type ResizerConfig struct {
-	MemoryMB      int
-	TimeoutSec    int
-	WorkDirectory string
+	MemoryMB   int
+	TimeoutSec int
 }
 
 type ResizeHandler struct {
@@ -68,7 +66,6 @@ type ResizeHandler struct {
 	session           *session.Session
 	memoryLimit       string
 	timeout           string
-	directory         string
 }
 
 func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
@@ -155,18 +152,10 @@ func (rh *ResizeHandler) processSize(originalFilename, format string, size pkg.S
 }
 
 func (rh *ResizeHandler) generateRandomFileName(format string) string {
-	filename := fmt.Sprintf("%s%s.%s", rh.getWorkDirectory(), uuid.New(), format)
+	filename := fmt.Sprintf("%s.%s", uuid.New(), format)
 	rh.cleanUpFiles.Store(filename, filename)
 
 	return filename
-}
-
-func (rh *ResizeHandler) getWorkDirectory() string {
-	if rh.directory == "" {
-		return ""
-	}
-
-	return fmt.Sprintf("%s/", rh.directory)
 }
 
 func (rh *ResizeHandler) Cleanup() {

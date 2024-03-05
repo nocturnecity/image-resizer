@@ -27,12 +27,6 @@ spec:
       serviceAccountName: {{ include "gigg-resizer.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{ if .Values.externalStorage.enabled }}
-      volumes:
-        - name: {{ include "gigg-resizer.fullname" . }}-volume
-          persistentVolumeClaim:
-            claimName: {{ include "gigg-resizer.fullname" . }}-pvc
-      {{end}}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -44,9 +38,7 @@ spec:
             - "--timeout={{ .Values.timeoutSeconds }}"
             - "--loglvl={{ .Values.loglvl }}"
             - "--memory-limit={{ .Values.memoryLimit }}"
-            {{ if .Values.externalStorage.enabled }}
-            - "--working-directory='{{ .Values.externalStorage.mountPath }}'"
-            {{end}}
+            - "--workers={{ .Values.workersCount }}"
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -59,11 +51,6 @@ spec:
             httpGet:
               path: /healthz
               port: http
-          {{ if .Values.externalStorage.enabled }}
-          volumeMounts:
-            - mountPath: {{.Values.externalStorage.mountPath}}
-              name: {{ include "gigg-resizer.fullname" . }}-volume
-          {{end}}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}

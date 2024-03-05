@@ -14,6 +14,7 @@ import (
 
 const runCmd = "run"
 const defaultPort = 8080
+const defaultWorkersCount = 2
 const defaultTimeout = 90
 const defaultMemoryLimit = 250
 const defaultLogLvl = "info"
@@ -28,18 +29,18 @@ func main() {
 	cmdName := os.Args[1]
 	args := os.Args[2:]
 	var (
-		logLVL           string
-		port             int
-		timeout          int
-		memoryLimit      int
-		workingDirectory string
+		logLVL       string
+		port         int
+		timeout      int
+		memoryLimit  int
+		workersCount int
 	)
 
 	cmd := flag.NewFlagSet(runCmd, flag.ExitOnError)
 	cmd.StringVar(&logLVL, "loglvl", defaultLogLvl, "set logging level: 'debug', 'info', 'error'")
-	cmd.StringVar(&workingDirectory, "working-directory", "", "set directory to save temporary files")
 	cmd.IntVar(&memoryLimit, "memory-limit", defaultMemoryLimit, "set MB memory limit per command")
 	cmd.IntVar(&port, "port", defaultPort, "set HTTP server port")
+	cmd.IntVar(&workersCount, "workers", defaultWorkersCount, "set workers (max count concurrent resizes)")
 	cmd.IntVar(&timeout, "timeout", defaultTimeout, "set HTTP server timeout seconds")
 
 	if err := cmd.Parse(args); err != nil {
@@ -62,7 +63,7 @@ func main() {
 			port,
 			time.Duration(timeout)*time.Second,
 			memoryLimit,
-			workingDirectory,
+			workersCount,
 			stdLog)
 	default:
 		stdLog.Fatal("Unknown sub-command: %s\n", args[0])

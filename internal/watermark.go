@@ -95,6 +95,7 @@ func newWatermarkCache(l *StdLog) *watermarkCache {
 		entities: map[string]watermarkCacheEntity{},
 		mu:       sync.RWMutex{},
 		l:        l,
+		qc:       make(chan struct{}),
 	}
 	defer runJanitor(c, DefaultJanitorInterval)
 	runtime.SetFinalizer(c, stopJanitor)
@@ -105,6 +106,7 @@ type watermarkCache struct {
 	entities map[string]watermarkCacheEntity
 	ttl      time.Duration
 	mu       sync.RWMutex
+	qc       chan struct{}
 	j        *janitor
 	l        *StdLog
 }
@@ -139,6 +141,7 @@ func (w *watermarkCache) Set(key, path, format string) {
 func (w *watermarkCache) Shutdown() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	close(w.qc)
 	for k, v := range w.entities {
 		w.clearEntity(k, v.path)
 	}
@@ -151,9 +154,39 @@ func (w *watermarkCache) DeleteExpired() {
 	now := time.Now().UnixNano()
 	for k, v := range w.entities {
 		if now > v.expiredAt {
-			w.clearEntity(k, v.path)
+			w.onExpired(k, v.path)
 		}
 	}
+}
+
+// prevent deleting during resize process
+func (w *watermarkCache) onExpired(key, toDelete string) {
+	delete(w.entities, key)
+	go func() {
+		timer := time.NewTimer(5 * time.Minute)
+		for {
+			select {
+			case <-timer.C:
+				err := os.Remove(toDelete)
+				if err != nil {
+					w.l.Error("error clean up file delete: %v", err)
+				}
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			case <-w.qc:
+				err := os.Remove(toDelete)
+				if err != nil {
+					w.l.Error("error clean up file delete: %v", err)
+				}
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			}
+		}
+	}()
 }
 
 func (w *watermarkCache) clearEntity(key, toDelete string) {
