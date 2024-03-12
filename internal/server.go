@@ -34,11 +34,27 @@ var resizeRequests = prometheus.NewCounter(
 		Help: "Total number of resize requests received.",
 	},
 )
+
+var queueLength = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "queue_length",
+		Help: "Current Queue length.",
+	},
+)
+
+var (
+	resizeDurationWithQueueWait = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "resize_duration_with_queue_wait_milliseconds",
+		Help:    "The duration of the resize plus waiting in queue in milliseconds",
+		Buckets: prometheus.LinearBuckets(1000, 2500, 40), // from 1 to 100 seconds per 2.5 second
+	})
+)
+
 var (
 	resizeDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name:    "resize_duration_milliseconds",
 		Help:    "The duration of the resize in milliseconds",
-		Buckets: prometheus.LinearBuckets(10, 10, 100), // Customize your buckets here
+		Buckets: prometheus.LinearBuckets(1000, 2500, 40), // from 1 to 100 seconds per 2.5 second
 	})
 )
 
@@ -70,9 +86,11 @@ func (s *Server) Run() {
 	s.server = server
 
 	// Register it with Prometheus
+	prometheus.MustRegister(queueLength)
 	prometheus.MustRegister(resizeRequests)
 	prometheus.MustRegister(failedResizes)
 	prometheus.MustRegister(resizeDuration)
+	prometheus.MustRegister(resizeDurationWithQueueWait)
 
 	s.pool = NewPool(s.logger, s.workersCount)
 	s.pool.Run()
@@ -125,11 +143,13 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 		ResizerConfig{MemoryMB: s.resizeMemoryLimit, TimeoutSec: int(s.timeout.Seconds())})
 	defer handler.Cleanup()
 	resChan := make(chan jobResult)
+	queueLength.Inc()
 	s.pool.Dispatch(job{
 		h: handler,
 		c: resChan,
 	})
 	poolRes := <-resChan
+	defer queueLength.Dec()
 	res, err := poolRes.result, poolRes.err
 	if err != nil {
 		go handler.CleanupOnError()
@@ -138,7 +158,7 @@ func (s *Server) resizeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
-	resizeDuration.Observe(durationMs)
+	resizeDurationWithQueueWait.Observe(durationMs)
 	s.logger.Debug("RESIZE OBSERVED EXECUTION TIME FOR %s: %.2f sec", req.OriginalPath, durationMs/1000)
 	s.processHttpSuccess(r, w, res)
 }

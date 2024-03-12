@@ -70,6 +70,7 @@ type ResizeHandler struct {
 
 func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	rh.log.Debug("Processing request %v", rh.Request)
+	start := time.Now()
 	originalFileName := rh.generateRandomFileName(rh.Request.Format)
 	err := rh.downloadFromS3(rh.Request.BucketName, rh.Request.OriginalPath, originalFileName, rh.Request.Region)
 	if err != nil {
@@ -118,7 +119,8 @@ func (rh *ResizeHandler) ProcessRequest() (map[string]pkg.ResultSize, error) {
 	if hasUploadError {
 		return nil, fmt.Errorf("process request error: files failed to uploade to S3")
 	}
-
+	durationMs := float64(time.Since(start).Milliseconds())
+	resizeDuration.Observe(durationMs)
 	return result, nil
 }
 
@@ -315,7 +317,7 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error strip original %w, command ourput: %s", err, res)
+		return fmt.Errorf("error strip original %w, command output: %s", err, res)
 	}
 
 	return nil
@@ -379,7 +381,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error resize file %w, command ourput: %s", err, res)
+		return fmt.Errorf("error resize file %w, command output: %s", err, res)
 
 	}
 
@@ -407,7 +409,7 @@ func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptio
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error crop file %w, command ourput: %s", err, res)
+		return fmt.Errorf("error crop file %w, command output: %s", err, res)
 	}
 
 	return nil
@@ -447,7 +449,7 @@ func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.Wate
 		rh.log.Debug(string(res))
 	}
 	if err != nil {
-		return fmt.Errorf("error add watermark to file %w, command ourput: %s", err, res)
+		return fmt.Errorf("error add watermark to file %w, command output: %s", err, res)
 	}
 
 	return nil
