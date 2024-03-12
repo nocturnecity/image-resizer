@@ -34,6 +34,15 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
+persistence:
+  enabled: false
+  existingClaim: ""
+  annotations: {}
+  storageClass: "default"
+  accessModes:
+     - ReadWriteOnce
+  size: "8Gi"
+
 podAnnotations: {}
 
 podSecurityContext: {}
