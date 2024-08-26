@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -297,27 +298,35 @@ func (rh *ResizeHandler) uploadToS3(bucketName, format, path, filename string, r
 
 func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg.ResizeOptions) error {
 	start := time.Now()
-	profileFileName := rh.generateRandomFileName(DefaultColorProfileFormat)
-	cmd := exec.Command(
-		"convert",
-		"-limit",
-		"memory",
-		rh.memoryLimit,
-		"-limit",
-		"time",
-		rh.timeout,
-		filename,
-		profileFileName)
-	res, err := cmd.CombinedOutput()
-	if string(res) != "" {
-		rh.log.Debug(string(res))
-	}
+	var err error
+	var cmd *exec.Cmd
+	var profileFileName string
+	hasColorProfile, err := rh.getColorProfile(filename)
 	if err != nil {
-		return fmt.Errorf("error color profile creation %w, command output: %s", err, res)
+		return fmt.Errorf("error stripAndRotateOriginal %w", err)
+	}
+	if hasColorProfile {
+		profileFileName = rh.generateRandomFileName(DefaultColorProfileFormat)
+		cmd = exec.Command(
+			"magick",
+			"-limit",
+			"memory",
+			rh.memoryLimit,
+			"-limit",
+			"time",
+			rh.timeout,
+			filename,
+			profileFileName)
+		res, err := cmd.CombinedOutput()
+		if string(res) != "" {
+			rh.log.Debug(string(res))
+		}
+		if err != nil {
+			return fmt.Errorf("error color profile creation %w, command output: %s", err, res)
+		}
 	}
 
-	cmd = exec.Command(
-		"convert",
+	commonArgs := []string{
 		"-limit",
 		"memory",
 		rh.memoryLimit,
@@ -329,11 +338,15 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg
 		fmt.Sprintf("%dx%d", opt.X, opt.Y),
 		"-auto-orient",
 		"-strip",
-		"-profile",
-		profileFileName,
-		result)
+	}
 
-	res, err = cmd.CombinedOutput()
+	if hasColorProfile && profileFileName != "" {
+		commonArgs = append(commonArgs, "-profile", profileFileName)
+	}
+	commonArgs = append(commonArgs, result)
+	cmd = exec.Command("magick", commonArgs...)
+
+	res, err := cmd.CombinedOutput()
 	durationMs := float64(time.Since(start).Milliseconds())
 	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
@@ -368,7 +381,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 	}
 
 	cmd := exec.Command(
-		"convert",
+		"magick",
 		append(
 			commonArgs,
 			[]string{
@@ -384,7 +397,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 	)
 	if opt.QuickResize {
 		cmd = exec.Command(
-			"convert",
+			"magick",
 			append(
 				commonArgs,
 				[]string{
@@ -414,7 +427,7 @@ func (rh *ResizeHandler) resizeCommand(filename, result string, forceBackground 
 func (rh *ResizeHandler) cropCommand(filename, result string, opt *pkg.CropOptions) error {
 	start := time.Now()
 	cmd := exec.Command(
-		"convert",
+		"magick",
 		"-limit",
 		"memory",
 		rh.memoryLimit,
@@ -517,6 +530,42 @@ func (rh *ResizeHandler) getResultFileInfo(filename, path string) (*pkg.ResultSi
 	}
 
 	return imageInfo, nil
+}
+
+func (rh *ResizeHandler) getColorProfile(filename string) (bool, error) {
+	cmd := exec.Command("identify", "-quiet", "-format", "%[profiles]", filename)
+	rh.log.Debug(cmd.String())
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return false, err
+	}
+	if err := cmd.Start(); err != nil {
+		return false, err
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	scanner.Split(bufio.ScanLines)
+
+	var profiles string
+	i := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch i {
+		case 0:
+			profiles = line
+		}
+		i++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return false, err
+	}
+
+	return strings.Contains(profiles, "icc"), nil
 }
 
 func (rh *ResizeHandler) getMimeTypeFromFormat(format string) string {
