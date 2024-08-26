@@ -19,6 +19,7 @@ import (
 )
 
 const DefaultJpegFormat = "jpeg"
+const DefaultColorProfileFormat = "icc"
 const DefaultWatermarkQuality = 100
 const DefaultWatermarkDissolve = "100"
 const DefaultResizerFilter = "Lanczos2"
@@ -296,7 +297,26 @@ func (rh *ResizeHandler) uploadToS3(bucketName, format, path, filename string, r
 
 func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg.ResizeOptions) error {
 	start := time.Now()
+	profileFileName := rh.generateRandomFileName(DefaultColorProfileFormat)
 	cmd := exec.Command(
+		"convert",
+		"-limit",
+		"memory",
+		rh.memoryLimit,
+		"-limit",
+		"time",
+		rh.timeout,
+		filename,
+		profileFileName)
+	res, err := cmd.CombinedOutput()
+	if string(res) != "" {
+		rh.log.Debug(string(res))
+	}
+	if err != nil {
+		return fmt.Errorf("error color profile creation %w, command output: %s", err, res)
+	}
+
+	cmd = exec.Command(
 		"convert",
 		"-limit",
 		"memory",
@@ -309,8 +329,11 @@ func (rh *ResizeHandler) stripAndRotateOriginal(filename, result string, opt pkg
 		fmt.Sprintf("%dx%d", opt.X, opt.Y),
 		"-auto-orient",
 		"-strip",
+		"-profile",
+		profileFileName,
 		result)
-	res, err := cmd.CombinedOutput()
+
+	res, err = cmd.CombinedOutput()
 	durationMs := float64(time.Since(start).Milliseconds())
 	rh.log.Debug("%s: duration: %.2f", cmd.String(), durationMs)
 	if string(res) != "" {
