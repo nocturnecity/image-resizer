@@ -13,7 +13,7 @@ image:
   repository: random1st/imagemagick
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "0.3.15"
+  tag: "0.3.16"
 
 imagePullSecrets: []
 nameOverride: ""

@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.21-bookworm AS BUILDER
+FROM --platform=linux/amd64 public.ecr.aws/docker/library/golang:1.22-bookworm AS BUILDER
 
 RUN mkdir -p /app
 WORKDIR /app
