@@ -492,7 +492,14 @@ func (rh *ResizeHandler) waterMarkCommand(filename, result string, opt *pkg.Wate
 }
 
 func (rh *ResizeHandler) getResultFileInfo(filename, path string) (*pkg.ResultSize, error) {
-	cmd := exec.Command("identify", "-format", "%w\n%h", filename)
+	cmd := exec.Command(
+		"identify",
+		"-limit",
+		"memory",
+		rh.memoryLimit,
+		"-format",
+		"%w\n%h",
+		filename)
 	rh.log.Debug(cmd.String())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -533,7 +540,15 @@ func (rh *ResizeHandler) getResultFileInfo(filename, path string) (*pkg.ResultSi
 }
 
 func (rh *ResizeHandler) getColorProfile(filename string) (bool, error) {
-	cmd := exec.Command("identify", "-quiet", "-format", "%[profiles]", filename)
+	cmd := exec.Command(
+		"identify",
+		"-limit",
+		"memory",
+		rh.memoryLimit,
+		"-quiet",
+		"-format",
+		"%[profiles]",
+		filename)
 	rh.log.Debug(cmd.String())
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
