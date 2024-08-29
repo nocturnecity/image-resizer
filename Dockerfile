@@ -9,19 +9,68 @@ COPY . .
 RUN go build -o gigg-image-worker cmd/server/main.go
 
 
-FROM --platform=linux/amd64  dpokidov/imagemagick:latest-bookworm
+FROM --platform=linux/amd64 debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 ARG IM_VERSION=7.1.1-36
+ARG LIB_HEIF_VERSION=1.18.2
+ARG LIB_AOM_VERSION=3.9.1
+ARG LIB_WEBP_VERSION=1.4.0
+ARG LIBJXL_VERSION=0.10.3
 
 RUN apt-get -y update && \
     apt-get -y upgrade && \
-    apt-get install -y --no-install-recommends git make pkg-config autoconf curl cmake clang libomp-dev ca-certificates automake
+    apt-get install -y --no-install-recommends git make pkg-config autoconf curl cmake clang libomp-dev ca-certificates automake \
+    # libaom
+    yasm \
+    # libheif
+    libde265-0 libde265-dev libjpeg62-turbo libjpeg62-turbo-dev x265 libx265-dev libtool \
+    # libwebp
+    libsdl1.2-dev libgif-dev \
+    # libjxl
+    libbrotli-dev \
+    # IM
+    libpng16-16 libpng-dev libjpeg62-turbo libjpeg62-turbo-dev libgomp1 ghostscript libxml2-dev libxml2-utils libtiff-dev libfontconfig1-dev libfreetype6-dev fonts-dejavu liblcms2-2 liblcms2-dev libtcmalloc-minimal4 \
+    # Install manually to prevent deleting with -dev packages
+    libxext6 libbrotli1 && \
+    export CC=clang CXX=clang++ && \
+    # Building libwebp
+    git clone -b v${LIB_WEBP_VERSION} --depth 1 https://chromium.googlesource.com/webm/libwebp && \
+    cd libwebp && \
+    mkdir build && cd build && cmake -DBUILD_SHARED_LIBS=ON ../ && make && make install && \
+    ldconfig /usr/local/lib && \
+    cd ../../ && rm -rf libwebp && \
+    # Building libjxl
+    git clone -b v${LIBJXL_VERSION} https://github.com/libjxl/libjxl.git --depth 1 --recursive --shallow-submodules && \
+    cd libjxl && \
+    mkdir build && \
+    cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DJPEGXL_FORCE_SYSTEM_BROTLI=ON -DJPEGXL_FORCE_SYSTEM_LCMS2=ON .. && \
+    cmake --build . -- -j$(nproc) && \
+    cmake --install . && \
+    cd ../../ && \
+    rm -rf libjxl && \
+    ldconfig /usr/local/lib && \
+    # Building libaom
+    git clone -b v${LIB_AOM_VERSION} --depth 1 https://aomedia.googlesource.com/aom && \
+    mkdir build_aom && \
+    cd build_aom && \
+    cmake ../aom/ -DENABLE_TESTS=0 -DBUILD_SHARED_LIBS=1 && make && make install && \
+    ldconfig /usr/local/lib && \
+    cd .. && \
+    rm -rf aom && \
+    rm -rf build_aom && \
+    # Building libheif
+    git clone -b v${LIB_HEIF_VERSION} --depth 1 https://github.com/strukturag/libheif.git && \
+    cd libheif/ && \
+    mkdir build && cd build && cmake --preset=release .. && make && make install && cd ../../ && \
+    ldconfig /usr/local/lib && \
+    rm -rf libheif && \
     # Building ImageMagick
-RUN git clone -b ${IM_VERSION} --depth 1 https://github.com/ImageMagick/ImageMagick.git && \
+    git clone -b ${IM_VERSION} --depth 1 https://github.com/ImageMagick/ImageMagick.git && \
     cd ImageMagick && \
-    LIBS="-lsharpyuv" ./configure --without-magick-plus-plus --disable-docs --disable-static --disable-hdri --with-tiff --with-jxl --with-tcmalloc && \
+    LIBS="-lsharpyuv" ./configure --without-magick-plus-plus --disable-docs --disable-static --with-tiff --with-jxl --with-tcmalloc && \
     make && make install && \
     ldconfig /usr/local/lib && \
     apt-get remove --autoremove --purge -y make cmake clang clang-14 curl yasm git autoconf automake pkg-config libpng-dev libjpeg62-turbo-dev libde265-dev libx265-dev libxml2-dev libtiff-dev libfontconfig1-dev libfreetype6-dev liblcms2-dev libsdl1.2-dev libgif-dev libbrotli-dev && \
